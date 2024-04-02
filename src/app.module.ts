@@ -10,6 +10,7 @@ import { ChapterModule } from './chapter/chapter.module';
 import { CommentModule } from './comment/comment.module';
 import { AdminModule } from './admin/admin.module';
 import { CloudImageModule } from './cloud-image/cloud-image.module';
+import { CrawlModule } from './crawl/crawl.module';
 
 @Module({
   imports: [
@@ -23,7 +24,8 @@ import { CloudImageModule } from './cloud-image/cloud-image.module';
     ChapterModule,
     CommentModule,
     AdminModule,
-    CloudImageModule
+    CloudImageModule,
+    CrawlModule
   ],
   controllers: [AppController],
   providers: [AppService],
