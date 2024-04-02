@@ -8,6 +8,8 @@ import { UserModule } from './user/user.module';
 import { BookModule } from './book/book.module';
 import { ChapterModule } from './chapter/chapter.module';
 import { CommentModule } from './comment/comment.module';
+import { AdminModule } from './admin/admin.module';
+import { CloudImageModule } from './cloud-image/cloud-image.module';
 
 @Module({
   imports: [
@@ -19,7 +21,9 @@ import { CommentModule } from './comment/comment.module';
     UserModule,
     BookModule,
     ChapterModule,
-    CommentModule
+    CommentModule,
+    AdminModule,
+    CloudImageModule
   ],
   controllers: [AppController],
   providers: [AppService],
