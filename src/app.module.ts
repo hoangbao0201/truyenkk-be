@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { UserModule } from './user/user.module';
 import { BookModule } from './book/book.module';
 import { ChapterModule } from './chapter/chapter.module';
+import { CommentModule } from './comment/comment.module';
 
 @Module({
   imports: [
@@ -17,7 +18,8 @@ import { ChapterModule } from './chapter/chapter.module';
     AuthModule,
     UserModule,
     BookModule,
-    ChapterModule
+    ChapterModule,
+    CommentModule
   ],
   controllers: [AppController],
   providers: [AppService],
