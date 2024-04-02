@@ -1,0 +1,163 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+
+model Role {
+  roleId   Int    @id @default(autoincrement())
+  roleName String @unique
+  users    User[]
+}
+
+model User {
+  userId      Int      @id @default(autoincrement())
+  name        String
+  username    String   @unique
+  email       String   @unique
+  password    String?
+  description String?
+  rank        Int      @default(0)
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  roleId Int
+  role   Role @relation(fields: [roleId], references: [roleId])
+
+  books     Book[]
+  userViews UserView[]
+
+  commentsSent     Comment[]             @relation(name: "Sender")
+  commentsReceived Comment[]             @relation(name: "Receiver")
+  booksFollow      UserBookFollowModel[]
+}
+
+model Book {
+  bookId      Int      @id @default(autoincrement())
+  slug        String
+  title       String
+  anotherName String?
+  description String?
+  status      Int      @default(1)
+  thumbnail   String?
+  scrapedUrl  String   @unique
+  next        String?
+  type        String
+  isGreatBook Boolean? @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  postedById Int
+  postedBy   User    @relation(fields: [postedById], references: [userId], onDelete: Cascade)
+  authorId   Int?
+  author     Author? @relation(fields: [authorId], references: [authorId], onDelete: Cascade)
+
+  tags        BookTag[]
+  chapters    Chapter[]
+  userViews   UserView[]
+  comments    Comment[]
+  usersFollow UserBookFollowModel[]
+  // accoutsCloudBook AccoutCloudBook[]
+
+  @@index([bookId])
+}
+
+model UserBookFollowModel {
+  userId Int
+  bookId Int
+
+  user User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  book Book @relation(fields: [bookId], references: [bookId], onDelete: Cascade)
+
+  @@id([userId, bookId])
+}
+
+// Book Tag
+model BookTag {
+  bookId Int
+  tagId  String
+
+  book Book @relation(fields: [bookId], references: [bookId], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [tagId], onDelete: Cascade)
+
+  @@id([bookId, tagId])
+}
+
+model Tag {
+  tagId    String
+  bookTags BookTag[]
+
+  @@id([tagId])
+}
+
+// Author
+model Author {
+  authorId Int    @id @default(autoincrement())
+  name     String @unique
+  books    Book[]
+}
+
+// Chapter
+model Chapter {
+  chapterNumber Int
+  title         String?
+  next          String?
+  content       String  @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bookId  Int
+  book    Book       @relation(fields: [bookId], references: [bookId], onDelete: Cascade)
+  Comment Comment[]
+  views   UserView[]
+
+  @@id([chapterNumber, bookId])
+}
+
+model Comment {
+  commentId   Int      @id @default(autoincrement())
+  commentText String   @db.Text
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  bookId        Int
+  chapterNumber Int?
+
+  senderId   Int
+  receiverId Int?
+  parentId   Int?
+
+  book    Book     @relation(fields: [bookId], references: [bookId], onDelete: Cascade)
+  chapter Chapter? @relation(fields: [bookId, chapterNumber], references: [bookId, chapterNumber], onDelete: Cascade)
+
+  sender   User     @relation(name: "Sender", fields: [senderId], references: [userId], onDelete: Cascade)
+  receiver User?    @relation(name: "Receiver", fields: [receiverId], references: [userId])
+  parent   Comment? @relation(name: "ParentComment", fields: [parentId], references: [commentId], onDelete: Cascade)
+
+  replyComments Comment[] @relation(name: "ParentComment")
+}
+
+model UserView {
+  userViewId    Int      @id @default(autoincrement())
+  userId        Int?
+  bookId        Int
+  chapterNumber Int
+  createdAt     DateTime @default(now())
+
+  user    User?   @relation(fields: [userId], references: [userId])
+  book    Book    @relation(fields: [bookId], references: [bookId], onDelete: Cascade)
+  chapter Chapter @relation(fields: [bookId, chapterNumber], references: [bookId, chapterNumber], onDelete: Cascade)
+}
