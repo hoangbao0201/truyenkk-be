@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudImageService } from '../cloud-image/cloud-image.service';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+import userAgent from 'random-useragent';
+import * as https from 'https'
 
 @Injectable()
 export class AdminService {
@@ -108,7 +112,7 @@ export class AdminService {
         },
       });
       await this.cloudImage.deleteFolder(`books/${bookId}`);
-      
+
       return {
         success: true,
       };
@@ -211,10 +215,30 @@ export class AdminService {
     }
   }
 
+  // https://webcache.googleusercontent.com/search?q=cache:
   async test(bookId: number) {
     try {
+      // const image = await this.cloudImage.uploadImageBookOnS3({
+      //   url: "st.nettruyentt.com/data/comics/161/ta-la-ta-de-3254.jpg",
+      //   bookId: 111111111
+      // })
+
+      const book = await this.prismaService.chapter.findUnique({
+        where: {
+          chapterNumber_bookId: {
+            bookId: 21,
+            chapterNumber: 5
+          },
+        },
+        // data: {
+        //   next: "truyen-tranh/ta-la-ta-de/chap-6/546292"
+        // }
+      })
+
       return {
-        success: true
+        success: true,
+        book: book
+        // image: image
       };
     } catch (error) {
       return {
@@ -223,5 +247,4 @@ export class AdminService {
       };
     }
   }
-
 }

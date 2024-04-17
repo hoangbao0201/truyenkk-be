@@ -8,6 +8,6 @@ export class CrawlBookDTO {
 
     @IsString()
     @IsOptional()
-    @IsIn(["nettruyen"])
-    type: "nettruyen"
+    @IsIn(["nettruyen", "manhuavn", "truyenqq"])
+    type: "nettruyen" | "manhuavn" | "truyenqq"
 } 

@@ -8,8 +8,8 @@ export class CrawlChapterDTO {
 
     @IsString()
     @IsOptional()
-    @IsIn(["nettruyen"])
-    type: "nettruyen"
+    @IsIn(["nettruyen", "manhuavn", "truyenqq"])
+    type: "nettruyen" | "manhuavn" | "truyenqq"
 
     @IsNumber()
     @IsOptional()

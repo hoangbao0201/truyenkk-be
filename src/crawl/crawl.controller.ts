@@ -11,7 +11,7 @@ export class CrawlController {
   createBook(
     @Request() req,
     @Body('bookUrl') bookUrl: string,
-    @Body('type') type: "nettruyen",
+    @Body('type') type: "nettruyen" | "manhuavn" | "truyenqq",
   ) {
     return this.crawlService.createBook(req.user.userId, {
       type: type,
@@ -23,7 +23,7 @@ export class CrawlController {
   @Post('/chapter')
   createChapters(
     @Request() req,
-    @Body('type') type: "nettruyen",
+    @Body('type') type: "nettruyen" | "manhuavn" | "truyenqq",
     @Body('take') take: number,
     @Body('bookUrl') bookUrl: string,
   ) {

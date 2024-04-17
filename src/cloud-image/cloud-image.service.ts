@@ -1,8 +1,10 @@
 import axios from 'axios';
+import * as sharp from 'sharp';
 import userAgent from 'random-useragent';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { join } from 'path';
 
 @Injectable()
 export class CloudImageService {
@@ -30,15 +32,27 @@ export class CloudImageService {
     try {
       const imageGet = await axios.get(url, {
         responseType: 'arraybuffer',
+        headers: {
+          'Sec-Ch-Ua':
+            '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+          'Sec-Ch-Ua-Mobile': '?0',
+          'Sec-Ch-Ua-Platform': 'Windows',
+          'User-Agent': userAgent?.getRandom(),
+        },
       });
 
-      const key = `books/${bookId}/${Date.now().toString()}.jpg`;
+      // Process the image to limit its width
+      const processedImage = await sharp(imageGet.data)
+        .resize({ width: 282, height: 373, fit: 'cover', position: 'center' })
+        .toBuffer();
+
+      const key = `truyenkk/books/${bookId}/${Date.now().toString()}.jpg`;
       await this.s3_client.send(
         new PutObjectCommand({
           Bucket: 'hxclub-bucket',
           Key: key,
           ContentType: imageGet?.headers['content-type'],
-          Body: Buffer.from(imageGet?.data),
+          Body: processedImage,
         }),
       );
       
@@ -68,38 +82,64 @@ export class CloudImageService {
       for (let i = 0; i < listUrl.length; i += 20) {
         const chunkUrls = listUrl.slice(i, i + 20);
         const uploadPromises = await chunkUrls.map(async (url) => {
-          const imageGet = await axios.get(`${url}`, {
-            responseType: 'arraybuffer',
-            headers: {
-              referer: domain,
-              'Sec-Ch-Ua':
-                '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-              'Sec-Ch-Ua-Mobile': '?0',
-              'Sec-Ch-Ua-Platform': 'Windows',
-              'User-Agent': userAgent?.getRandom(),
-            },
-          });
+          // try {
+            const imageGet = await axios.get(`${url}`, {
+              responseType: 'arraybuffer',
+              headers: {
+                referer: domain,
+                'Sec-Ch-Ua':
+                  '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+                'Sec-Ch-Ua-Mobile': '?0',
+                'Sec-Ch-Ua-Platform': 'Windows',
+                'User-Agent': userAgent?.getRandom(),
+              },
+            });
+  
+            const key = `truyenkk/books/${bookId}/chapters/${chapterNumber}/` + k + '.jpg';
+  
+            k++;
+            return new Promise<string>(async (resolve, reject) => {
+              try {
+                // Process the image to limit its width
+                const processedImage = await sharp(imageGet.data)
+                  .resize({ width: 1100 })
+                  .toBuffer();
 
-          const key = `books/${bookId}/chapters/${chapterNumber}/` + k + '.jpg';
+                // Load the logo image
+                const logoPath = join(__dirname, "../..", 'assets/images', 'banner-truyenkk.png');
+                const logoBuffer = await sharp(logoPath)
+                  .resize({ width: 270 })
+                  .toBuffer();
 
-          k++;
-          return new Promise<string>(async (resolve, reject) => {
-            try {
-              await this.s3_client.send(
-                new PutObjectCommand({
-                  Bucket: 'hxclub-bucket',
-                  Key: key,
-                  ContentType: imageGet?.headers['content-type'],
-                  Body: Buffer.from(imageGet?.data),
-                }),
-              );
-              console.log("Image " + k)
-              console.log(key)
-              resolve(key);
-            } catch (error) {
-              reject(error);
-            }
-          });
+                const finalImageBuffer = await sharp(processedImage)
+                  .composite([
+                    {
+                      input: logoBuffer,
+                      top: 10,
+                      left: 10,
+                    },
+                  ])
+                  .toBuffer();
+
+                await this.s3_client.send(
+                  new PutObjectCommand({
+                    Bucket: 'hxclub-bucket',
+                    Key: key,
+                    ContentType: imageGet?.headers['content-type'],
+                    Body: finalImageBuffer,
+                  }),
+                );
+                console.log("Image " + k)
+                console.log(key)
+                resolve(key);
+              } catch (error) {
+                reject(error);
+              }
+            });
+          // } catch (error) {
+          //   console.log("Lỗi image")
+          //   return { success: false, error };
+          // }
         });
 
         const chunkResults = await Promise.all(uploadPromises);

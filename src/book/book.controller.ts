@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Request, Put } from '@nestjs/common';
 import { BookService } from './book.service';
 import { PipGuard } from '../auth/guard/pip.guard';
 import { JwtGuard } from '../auth/guard/jwt.guard';
@@ -78,6 +78,15 @@ export class BookController {
     @Param("bookId") bookId: number
   ){
     return this.bookService.findOne(bookId);
+  }
+
+  @UseGuards(JwtGuard)
+  @Put("/:bookId")
+  update(
+    @Param("bookId") bookId: number,
+    @Body() body: { title: string, anotherName: string, author: null | string }
+  ){
+    return this.bookService.update({ bookId: +bookId, ...body });
   }
 
 }

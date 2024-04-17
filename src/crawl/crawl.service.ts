@@ -2,13 +2,12 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import userAgent from 'random-useragent';
 import { Injectable } from '@nestjs/common';
-import { listIdNettruyenToMyId } from '../constants/data';
 import { textToSlug } from '../utils/textToSlug';
 import { CrawlBookDTO } from './dto/crawl-book.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { CrawlChapterDTO } from './dto/crawl-chapter.dto';
 import { CloudImageService } from '../cloud-image/cloud-image.service';
-// import MockAdapter from "axios-mock-adapter"
+import { listIdToData } from '../constants/data';
 
 @Injectable()
 export class CrawlService {
@@ -27,6 +26,15 @@ export class CrawlService {
         if (!dataBook?.success) {
           throw new Error('Error crawling book');
         }
+
+        // return {
+        //   success: true,
+        //   book: {
+        //     ...dataBook.book,
+        //     bookUrl: bookUrl,
+        //     cvScrapedUrl,
+        //   }
+        // };
 
         // Create Book
         const {
@@ -48,18 +56,18 @@ export class CrawlService {
         //   bookUrl: bookUrl,
         //   dataBook: dataBook,
         //   cvScrapedUrl,
-        //   cvNext
+        //   cvNext,
         // };
 
         const bookRes = await this.prismaService.book.create({
           data: {
-            title: title.replace('- LXMANGA', '').trim(),
+            title: title.trim(),
             next: cvNext,
             status: status,
             type: type,
             slug: textToSlug(title),
             anotherName: anotherName,
-            description: description,
+            description: null,
             scrapedUrl: cvScrapedUrl,
             postedBy: {
               connect: {
@@ -69,11 +77,13 @@ export class CrawlService {
           },
         });
 
+        console.log('Thumbnail crawl: ', thumbnail);
         // Upload Thumbnail Novel
         const dataThumbnail = await this.cloudImage.uploadImageBookOnS3({
-          url: thumbnail,
+          url: thumbnail.trim(),
           bookId: bookRes?.bookId,
         });
+        console.log('Thumbnail create: ', dataThumbnail?.imageKey);
 
         // Update Thumbnail, Tag And Author Book
         await this.prismaService.book.update({
@@ -82,16 +92,16 @@ export class CrawlService {
           },
           data: {
             thumbnail: dataThumbnail?.imageKey,
-            author: {
-              connectOrCreate: {
-                where: {
-                  name: author,
-                },
-                create: {
-                  name: author,
-                },
-              },
-            },
+            // author: {
+            //   connectOrCreate: {
+            //     where: {
+            //       name: author,
+            //     },
+            //     create: {
+            //       name: author,
+            //     },
+            //   },
+            // },
             tags: {
               deleteMany: {},
               create: tags?.map((tag) => ({
@@ -114,7 +124,10 @@ export class CrawlService {
           success: true,
           type: type,
           book: {
-            ...dataBook?.book,
+            bookId: bookRes?.bookId,
+            title: title,
+            anotherName: anotherName,
+            author: author,
             thumbnail: dataThumbnail?.imageKey,
           },
         };
@@ -185,22 +198,38 @@ export class CrawlService {
         };
       }
 
-      if (bookRes?.chapters.length > 0 && !bookRes?.chapters[0].next) {
-        const dataChapter = await this.crawlChapter(
-          type,
-          bookRes?.chapters.length > 1
-            ? domain + '/' + bookRes?.chapters[1].next
-            : domain + '/' + bookRes?.next,
-        );
+      // if (bookRes?.chapters.length > 0 && !bookRes?.chapters[0].next) {
+      //   const dataChapter = await this.crawlChapter(
+      //     type,
+      //     bookRes?.chapters.length > 1
+      //       ? domain + '/' + bookRes?.chapters[1].next
+      //       : domain + '/' + bookRes?.next,
+      //   );
 
-        if (dataChapter?.success && !dataChapter?.next) {
-          return {
-            success: false,
-            error: 'Currently at the latest chapter.',
-          };
-        }
-        bookRes.chapters[0].next = dataChapter?.next.replace(domain + '/', '');
-      }
+      //   if (dataChapter?.success && !dataChapter?.next) {
+      //     return {
+      //       success: false,
+      //       error: 'Currently at the latest chapter.',
+      //     };
+      //   }
+      //   bookRes.chapters[0].next = dataChapter?.next.replace(domain + '/', '');
+      // }
+
+
+      const listUrlChapter = await this.crawlListChapter({
+        take: take,
+        type: type,
+        urlBook: bookUrl,
+        urlCurrent:
+          bookRes.chapters.length > 0 ? bookRes.chapters[0].next : bookRes.next,
+      });
+      // return {
+      //   success: true,
+      //   next: bookRes.next,
+      //   bookRes,
+      //   listUrlChapter: listUrlChapter,
+      // };
+      console.log("listUrlChapter: ", listUrlChapter);
 
       // Create Multiple Chapter
       const chapterRes = await this.createMultipleChaptersBook({
@@ -209,10 +238,11 @@ export class CrawlService {
         bookId: bookRes?.bookId,
         start: bookRes?._count.chapters,
         domain: domain,
-        chapterUrl:
-          bookRes?._count.chapters > 0
-            ? bookRes?.chapters[0].next
-            : bookRes?.next,
+        listUrlChapter: listUrlChapter.chapters,
+        // chapterUrl:
+        //   bookRes?._count.chapters > 0
+        //     ? bookRes?.chapters[0].next
+        //     : bookRes?.next,
       });
       if (!chapterRes?.success) {
         return {
@@ -220,6 +250,7 @@ export class CrawlService {
           error: 'Crawl error.',
         };
       }
+      console.log("END-----------------")
 
       return {
         success: true,
@@ -240,34 +271,38 @@ export class CrawlService {
     take,
     type,
     domain,
+    listUrlChapter,
     bookId,
-    chapterUrl,
+    // chapterUrl,
   }: {
     take: number;
     start: number;
     bookId: number;
     domain: string;
-    chapterUrl: string;
-    type: 'nettruyen';
+    listUrlChapter: string[];
+    // chapterUrl: string;
+    type: 'nettruyen' | 'manhuavn' | 'truyenqq';
   }) {
     let listChapter = [];
-    let urlQuery = chapterUrl;
+    // let urlQuery = listChapter[0];
 
     try {
       for (let i = start + 1; i <= start + take; i++) {
         const dataChapter = await this.crawlChapter(
           type,
-          domain + '/' + urlQuery,
+          domain + "/" + listUrlChapter[i - start - 1],
         );
         if (!dataChapter?.success) {
           throw new Error(`Error crawling chapter ${i}: ${dataChapter?.error}`);
         }
+
         // return {
         //   success: true,
-        //   chapterUrl,
+        //   // chapterUrl,
+        //   next: listUrlChapter[i - start],
         //   dataChapter,
-        //   cvNext,
-        //   domain: domain + "/" + urlQuery
+        //   // cvNext,
+        //   // domain: domain + '/' + urlQuery,
         // };
 
         const imagesChapter = await this.cloudImage.uploadImagesChapterOnS3({
@@ -278,7 +313,7 @@ export class CrawlService {
         });
 
         if (!imagesChapter?.success || imagesChapter?.images.length === 0) {
-          await this.cloudImage.deleteFolder(`books/${bookId}/chapters/${i}`);
+          await this.cloudImage.deleteFolder(`truyenkk/books/${bookId}/chapters/${i}`);
 
           throw new Error(
             `Failed to create images for chapter ${i}: ${imagesChapter?.error}`,
@@ -286,9 +321,7 @@ export class CrawlService {
         }
 
         // Push Array Create Books
-        const cvNext = dataChapter?.next
-          ? dataChapter?.next.replace(domain + '/', '')
-          : null;
+        const cvNext = listUrlChapter[i - start];
         listChapter.push({
           next: cvNext,
           bookId: bookId,
@@ -297,12 +330,14 @@ export class CrawlService {
           content: JSON.stringify(imagesChapter?.images),
         });
 
+        console.log("cvNext: ", cvNext)
+
         // If the next chapter doesn't exist
         if (!cvNext) {
           break;
         }
 
-        urlQuery = cvNext;
+        // urlQuery = listChapter[i - start + 1];
       }
 
       // Create Chapter Book
@@ -357,21 +392,24 @@ export class CrawlService {
   }
 
   // Crawl Book
-  async crawlBook(type: 'nettruyen', url: string) {
+  async crawlBook(type: 'nettruyen' | 'manhuavn' | 'truyenqq', url: string) {
     const baseUrl = new URL(url).origin;
     try {
-      const response = await axios.get(url, {
-        headers: {
-          referer: baseUrl,
-          'Sec-Ch-Ua':
-            '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-          'Sec-Ch-Ua-Mobile': '?0',
-          'Sec-Ch-Ua-Platform': 'Windows',
-          'User-Agent': userAgent?.getRandom(),
+      const response = await axios.get(
+        'https://webcache.googleusercontent.com/search?q=cache:' + url,
+        {
+          headers: {
+            referer: baseUrl,
+            'Sec-Ch-Ua':
+              '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': 'Windows',
+            'User-Agent': userAgent?.getRandom(),
+          },
         },
-      });
+      );
 
-      const $ = cheerio.load(response.data);
+      const $ = cheerio.load(response?.data, { decodeEntities: false });
       let title = '';
       let thumbnail = null;
       let description = '';
@@ -382,34 +420,53 @@ export class CrawlService {
       let next = null;
 
       if (type === 'nettruyen') {
-        title = $('title').text().split('- LXHENTAI')[0].trim();
-        const urlMatch = /url\('([^']+)'\)/.exec(
-          $('.rounded-lg.cover').attr('style'),
-        );
-        thumbnail = urlMatch ? urlMatch[1] : null;
-        author = $('.mt-2 .text-blue-500').first().text();
-        $(
-          '.bg-gray-500.hover\\:bg-gray-600.text-white.rounded.px-2.text-sm.inline-block',
-        ).each((index, element) => {
-          const tag = $(element).text().trim();
-          if (listIdNettruyenToMyId[tag]) {
-            tags.push(listIdNettruyenToMyId[tag]);
+        title = $('.title-detail').text().trim();
+
+        const getAnotherName = $('.other-name').text().trim();
+        anotherName =
+          getAnotherName === 'Đang cập nhật' ? null : getAnotherName;
+        console.log(getAnotherName);
+
+        thumbnail = $('.col-image img').attr('src').replace('//', '').trim();
+
+        const getAuthor = $('.author.row p').last().text();
+        author = getAuthor === 'Đang cập nhật' ? null : getAuthor;
+
+        $('.kind.row .col-xs-8 a').each((index, element) => {
+          const tag = $(element)
+            .attr('href')
+            .trim()
+            .replace(baseUrl + '/tim-truyen/', '');
+          console.log(tag);
+          if (tag in listIdToData) {
+            tags.push(tag);
           }
         });
-        next = $('.overflow-y-auto.overflow-x-hidden>a').last().attr('href');
+
+        next = $('.read-action a').first().attr('href');
+      } else if ('manhuavn') {
+        title = $('.wrap-content-info .title').text().trim();
+        anotherName = $('.wrap-content-info .list-info .info-row')
+          .eq(5)
+          .text()
+          .replace('Tác Giả :', '')
+          .trim();
+      } else if ('truyenqq') {
+        title = $('.book_other > h1').text().trim();
+        // anotherName = $('.wrap-content-info .list-info .info-row').eq(5).text().replace("Tác Giả :", "").trim();
       }
 
       return {
         success: true,
         book: {
           title: title,
-          thumbnail: thumbnail,
+          thumbnail: 'https://' + thumbnail,
           description: description,
           anotherName: anotherName,
           status: status,
           author: author,
           tags: tags,
-          next: next.length > 0 ? new URL(url).origin + next : null,
+          next: next?.length > 0 ? next : null,
         },
       };
     } catch (error) {
@@ -421,19 +478,23 @@ export class CrawlService {
   }
 
   // Crawl Chapter
-  async crawlChapter(type: 'nettruyen', url: string) {
+  async crawlChapter(type: 'nettruyen' | 'manhuavn' | 'truyenqq', url: string) {
     try {
+      console.log("chapter url: ", url)
       const baseUrl = new URL(url).origin;
-      const response = await axios.get(url, {
-        headers: {
-          referer: baseUrl,
-          'Sec-Ch-Ua':
-            '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-          'Sec-Ch-Ua-Mobile': '?0',
-          'Sec-Ch-Ua-Platform': 'Windows',
-          'User-Agent': userAgent?.getRandom(),
+      const response = await axios.get(
+        'https://webcache.googleusercontent.com/search?q=cache:' + url,
+        {
+          headers: {
+            referer: baseUrl,
+            'Sec-Ch-Ua':
+              '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': 'Windows',
+            'User-Agent': userAgent?.getRandom(),
+          },
         },
-      });
+      );
       const $ = cheerio.load(response.data);
 
       let title = '';
@@ -442,14 +503,16 @@ export class CrawlService {
 
       if (type === 'nettruyen') {
         title = '';
-        content = $('.lazy.max-w-full.my-0.mx-auto')
-          .map((index, element) => $(element).attr('src'))
+        content = $('.reading-detail .page-chapter img')
+          .map((index, element) => 'https:' + $(element).attr('src'))
           .get();
-        let nextChapter = $('a#btn-next').attr('href');
-        next =
-          nextChapter === 'javascript:nm5213(0)'
-            ? null
-            : new URL(url).origin + nextChapter;
+
+        console.log(content);
+        // let nextChapter = $('a#btn-next').attr('href');
+        // next =
+        //   nextChapter === 'javascript:nm5213(0)'
+        //     ? null
+        //     : new URL(url).origin + nextChapter;
       }
       return {
         success: true,
@@ -458,6 +521,66 @@ export class CrawlService {
           title: title,
           content: content,
         },
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error,
+      };
+    }
+  }
+
+  // Crawl List Chapter
+  async crawlListChapter({
+    take,
+    type,
+    urlBook,
+    urlCurrent,
+  }: {
+    take: number;
+    type: 'nettruyen' | 'manhuavn' | 'truyenqq';
+    urlBook: string;
+    urlCurrent: string;
+  }) {
+    try {
+      const baseUrl = new URL(urlBook).origin;
+      const response = await axios.get(
+        'https://webcache.googleusercontent.com/search?q=cache:' + urlBook,
+        {
+          headers: {
+            referer: baseUrl,
+            'Sec-Ch-Ua':
+              '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': 'Windows',
+            'User-Agent': userAgent?.getRandom(),
+          },
+        },
+      );
+      const $ = cheerio.load(response.data);
+
+      let title = '';
+      let listChapter = [];
+
+      if (type === 'nettruyen') {
+        title = '';
+        const getListChapter = $('#nt_listchapter > nav .chapter > a')
+          .map((index, element) => {
+            const urlChapter = $(element).attr('href');
+            return urlChapter.replace(baseUrl + "/", "").trim();
+          })
+          .get();
+
+        const currentIndex = getListChapter.indexOf(urlCurrent);
+        console.log("urlCurrent: ", urlCurrent);
+        console.log("getListChapter: ", getListChapter);
+        console.log("currentIndex: ", currentIndex);
+        console.log("take: ", take);
+        listChapter = [...getListChapter.slice(currentIndex - take, currentIndex+1)].reverse();
+      }
+      return {
+        success: true,
+        chapters: listChapter,
       };
     } catch (error) {
       return {

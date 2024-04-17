@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { textToSlug } from '../utils/textToSlug';
 
 @Injectable()
 export class BookService {
@@ -195,6 +196,58 @@ export class BookService {
             },
           },
         },
+      });
+
+      return {
+        success: true,
+        book: bookRes,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error,
+      };
+    }
+  }
+
+  async update({ bookId, title, anotherName, author }: { bookId: number, title: string, anotherName: string, author: string | null }) {
+    try {
+      let data: Prisma.BookUpdateInput = {};
+
+      if(title) {
+        data = {
+          ...data,
+          title: title,
+          slug: textToSlug(title)
+        }
+      }
+      if(anotherName) {
+        data = {
+          ...data,
+          anotherName: anotherName
+        }
+      }
+      if(author) {
+        data = {
+          ...data,
+          author: {
+            connectOrCreate: {
+              where: {
+                name: author
+              },
+              create: {
+                name: author
+              }
+            }
+          }
+        }
+      }
+      console.log({ bookId, title, anotherName, author })
+      const bookRes = await this.prismaService.book.update({
+        where: {
+          bookId: +bookId,
+        },
+        data: data,
       });
 
       return {
