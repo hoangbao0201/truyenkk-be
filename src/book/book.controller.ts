@@ -12,14 +12,15 @@ export class BookController {
   findAll(
     @Query('q') q?: string,
     @Query('author') author?: string,
-    @Query('genres') genres?: string,
+    @Query('genres') genres?: string, 
+    @Query('isGreatBook') isGreatBook?: string, 
     @Query('notgenres') notgenres?: string,
     @Query('take') take?: number,
     @Query('skip') skip?: number,
     @Query('otherId') otherId?: number,
     @Query('sort') sort?: 'desc' | 'asc',
   ) {
-    return this.bookService.findAll({ q, author, genres, notgenres, take: take, skip: skip, sort, otherId });
+    return this.bookService.findAll({ q, author, genres, notgenres, isGreatBook, take: take, skip: skip, sort, otherId });
   }
 
   // Get Books Seo

@@ -215,7 +215,6 @@ export class CrawlService {
       //   bookRes.chapters[0].next = dataChapter?.next.replace(domain + '/', '');
       // }
 
-
       const listUrlChapter = await this.crawlListChapter({
         take: take,
         type: type,
@@ -229,7 +228,6 @@ export class CrawlService {
       //   bookRes,
       //   listUrlChapter: listUrlChapter,
       // };
-      console.log("listUrlChapter: ", listUrlChapter);
 
       // Create Multiple Chapter
       const chapterRes = await this.createMultipleChaptersBook({
@@ -250,7 +248,7 @@ export class CrawlService {
           error: 'Crawl error.',
         };
       }
-      console.log("END-----------------")
+      console.log('============== END ==============');
 
       return {
         success: true,
@@ -280,20 +278,27 @@ export class CrawlService {
     bookId: number;
     domain: string;
     listUrlChapter: string[];
-    // chapterUrl: string;
     type: 'nettruyen' | 'manhuavn' | 'truyenqq';
-  }) {
+  }): Promise<{
+    success: boolean;
+    typeCrawl: string;
+    message?: string;
+    dataTest?: any;
+  }> {
     let listChapter = [];
-    // let urlQuery = listChapter[0];
 
     try {
       for (let i = start + 1; i <= start + take; i++) {
         const dataChapter = await this.crawlChapter(
           type,
-          domain + "/" + listUrlChapter[i - start - 1],
+          domain + '/' + listUrlChapter[i - start - 1],
         );
         if (!dataChapter?.success) {
-          throw new Error(`Error crawling chapter ${i}: ${dataChapter?.error}`);
+          return {
+            success: false,
+            typeCrawl: 'CHAPTER_FETCH_FAILURE',
+            message: `Lấy chương ${i} thất bại`,
+          };
         }
 
         // return {
@@ -313,11 +318,15 @@ export class CrawlService {
         });
 
         if (!imagesChapter?.success || imagesChapter?.images.length === 0) {
-          await this.cloudImage.deleteFolder(`truyenkk/books/${bookId}/chapters/${i}`);
-
-          throw new Error(
-            `Failed to create images for chapter ${i}: ${imagesChapter?.error}`,
+          await this.cloudImage.deleteFolder(
+            `truyenkk/books/${bookId}/chapters/${i}`,
           );
+
+          return {
+            success: false,
+            typeCrawl: 'CHAPTER_IMAGE_ERROR',
+            message: `Lấy ảnh của chương ${i} thất bại`,
+          };
         }
 
         // Push Array Create Books
@@ -330,7 +339,32 @@ export class CrawlService {
           content: JSON.stringify(imagesChapter?.images),
         });
 
-        console.log("cvNext: ", cvNext)
+        if (
+          listChapter.length >= 3 ||
+          listChapter.length >= take ||
+          (listChapter.length > 0 && !cvNext)
+        ) {
+          // Create Chapter Book
+          const chapterRes = await this.prismaService.chapter.createMany({
+            data: listChapter?.map((chapter) => chapter),
+          });
+          if (!chapterRes) {
+            return {
+              success: false,
+              typeCrawl: 'CREATE_CHAPTER_FAILURE',
+              message: 'Tạo chương thất bại',
+            };
+          }
+
+          // Update updatedAt of Book
+          await this.prismaService.book.update({
+            where: { bookId: bookId },
+            data: { updatedAt: new Date() },
+          });
+
+          listChapter = [];
+          console.log('============== UPLOAD CHAPTER ==============');
+        }
 
         // If the next chapter doesn't exist
         if (!cvNext) {
@@ -340,23 +374,10 @@ export class CrawlService {
         // urlQuery = listChapter[i - start + 1];
       }
 
-      // Create Chapter Book
-      const chapterRes = await this.prismaService.chapter.createMany({
-        data: listChapter?.map((chapter) => chapter),
-      });
-      if (!chapterRes) {
-        throw new Error(`Error creating chapters`);
-      }
-
-      // Update updatedAt of Book
-      await this.prismaService.book.update({
-        where: { bookId: bookId },
-        data: { updatedAt: new Date() },
-      });
-
       return {
         success: true,
-        message: 'Create chapters successfully',
+        typeCrawl: 'CREATE_CHAPTER_SUCCESS',
+        message: 'Tạo chương thành công',
       };
     } catch (error) {
       if (listChapter?.length > 0) {
@@ -365,7 +386,11 @@ export class CrawlService {
             data: listChapter?.map((chapter) => chapter),
           });
           if (!chapterRes) {
-            throw new Error('Error creating remaining chapters');
+            return {
+              success: false,
+              typeCrawl: 'CREATE_CHAPTER_FAILURE',
+              message: 'Tạo chương thất bại',
+            };
           }
 
           // Update updatedAt of Book
@@ -375,18 +400,21 @@ export class CrawlService {
           });
           return {
             success: true,
-            message: 'Create chapters successfully',
+            typeCrawl: 'CREATE_CHAPTER_SUCCESS',
+            message: 'Tạo chương thành công',
           };
         } catch (remainingChaptersError) {
           return {
             success: false,
-            error: `Error creating remaining chapters: ${remainingChaptersError?.message}`,
+            typeCrawl: 'CREATE_CHAPTER_FAILURE',
+            message: remainingChaptersError.message || 'Unknown error',
           };
         }
       }
       return {
         success: false,
-        error: error.message || 'Unknown error',
+        typeCrawl: 'CREATE_CHAPTER_FAILURE',
+        message: error.message || 'Unknown error',
       };
     }
   }
@@ -480,7 +508,7 @@ export class CrawlService {
   // Crawl Chapter
   async crawlChapter(type: 'nettruyen' | 'manhuavn' | 'truyenqq', url: string) {
     try {
-      console.log("chapter url: ", url)
+      // console.log('chapter url: ', url);
       const baseUrl = new URL(url).origin;
       const response = await axios.get(
         'https://webcache.googleusercontent.com/search?q=cache:' + url,
@@ -507,7 +535,7 @@ export class CrawlService {
           .map((index, element) => 'https:' + $(element).attr('src'))
           .get();
 
-        console.log(content);
+        // console.log(content);
         // let nextChapter = $('a#btn-next').attr('href');
         // next =
         //   nextChapter === 'javascript:nm5213(0)'
@@ -567,16 +595,18 @@ export class CrawlService {
         const getListChapter = $('#nt_listchapter > nav .chapter > a')
           .map((index, element) => {
             const urlChapter = $(element).attr('href');
-            return urlChapter.replace(baseUrl + "/", "").trim();
+            return urlChapter.replace(baseUrl + '/', '').trim();
           })
           .get();
 
         const currentIndex = getListChapter.indexOf(urlCurrent);
-        console.log("urlCurrent: ", urlCurrent);
-        console.log("getListChapter: ", getListChapter);
-        console.log("currentIndex: ", currentIndex);
-        console.log("take: ", take);
-        listChapter = [...getListChapter.slice(currentIndex - take, currentIndex+1)].reverse();
+        console.log('urlCurrent: ', urlCurrent);
+        console.log('getListChapter: ', getListChapter);
+        console.log('currentIndex: ', currentIndex);
+        console.log('take: ', take);
+        listChapter = [
+          ...getListChapter.slice(currentIndex - take, currentIndex + 1),
+        ].reverse();
       }
       return {
         success: true,

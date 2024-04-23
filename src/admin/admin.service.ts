@@ -111,7 +111,7 @@ export class AdminService {
           },
         },
       });
-      await this.cloudImage.deleteFolder(`books/${bookId}`);
+      await this.cloudImage.deleteFolder(`truyenkk/books/${bookId}`);
 
       return {
         success: true,

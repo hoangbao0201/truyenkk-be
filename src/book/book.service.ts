@@ -21,6 +21,7 @@ export class BookService {
     skip?: number;
     sort?: 'desc' | 'asc';
     otherId?: number;
+    isGreatBook?: string
   }) {
     const {
       q = '',
@@ -30,10 +31,11 @@ export class BookService {
       take = 24,
       skip = 0,
       sort = 'desc',
+      isGreatBook = null,
       otherId,
     } = options;
 
-    const cvQuery = `/api/books?genres=${genres}&notgenres=${notgenres || ''}&q=${q || ''}&take=${take || ''}&skip=${skip || ''}&sort=${sort || ''}&author=${author || ''}`;
+    const cvQuery = `/api/books?genres=${genres}&notgenres=${notgenres || ''}&q=${q || ''}&take=${take || ''}&skip=${skip || ''}&sort=${sort || ''}&author=${author || ''}?isGreatBook=${isGreatBook || ''}`;
     const cacheValue: any = await this.cacheManager.get(cvQuery);
     if (cacheValue) {
       return {
@@ -49,6 +51,12 @@ export class BookService {
       const notTags = notgenres ? notgenres?.split(',') : null;
 
       let where: Prisma.BookWhereInput = {};
+      if(isGreatBook) {
+        where = {
+          ...where,
+          isGreatBook: true
+        }
+      }
       if (haveTags) {
         where = {
           ...where,
