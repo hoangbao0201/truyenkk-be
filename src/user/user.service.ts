@@ -43,6 +43,9 @@ export class UserService {
             where: {
                 userId: userId,
             },
+            include: {
+                role: true
+            }
         });
     }
 
