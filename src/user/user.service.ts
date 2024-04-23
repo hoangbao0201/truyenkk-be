@@ -68,4 +68,27 @@ export class UserService {
             }
         });
     }
+
+    async updateName({ userId, name }: { userId: number, name: string }): Promise<any> {
+        try {
+            const user = await this.prismaService.user.update({
+                where: {
+                    userId: userId,
+                },
+                data: {
+                    name: name,
+                },
+            });
+    
+            return {
+                success: true,
+                user: user,
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error
+            }
+        }
+    }
 }

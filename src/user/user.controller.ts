@@ -1,5 +1,6 @@
 import {
-  Controller, Get, Param, Post, UseGuards
+  Body,
+  Controller, Get, Param, Post, Put, Request, UseGuards
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { JwtGuard } from '../auth/guard/jwt.guard';
@@ -21,6 +22,15 @@ export class UserController {
   }
 
   @UseGuards(JwtGuard)
+  @Put('/update/name')
+  updateInfo(
+    @Request() req,
+    @Body('name') name: string,
+  ) {
+    return this.userService.updateName({ userId: req.user.userId, name: name }); 
+  }
+
+  @UseGuards(JwtGuard)
   @Get(':username')
   findOne(@Param('username') username: string) {
     return this.userService.userDetail(username); 
@@ -35,4 +45,6 @@ export class UserController {
   // remove(@Param('id') id: string) {
   //   return this.userService.remove(+id);
   // }
+
+  
 }
