@@ -11,6 +11,7 @@ import { CommentModule } from './comment/comment.module';
 import { AdminModule } from './admin/admin.module';
 import { CloudImageModule } from './cloud-image/cloud-image.module';
 import { CrawlModule } from './crawl/crawl.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -25,7 +26,8 @@ import { CrawlModule } from './crawl/crawl.module';
     CommentModule,
     AdminModule,
     CloudImageModule,
-    CrawlModule
+    CrawlModule,
+    ChatModule
   ],
   controllers: [AppController],
   providers: [AppService],
