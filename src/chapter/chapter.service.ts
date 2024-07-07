@@ -25,6 +25,7 @@ export class ChapterService {
             select: {
               title: true,
               slug: true,
+              thumbnail: true,
               anotherName: true,
               author: {
                 select: {

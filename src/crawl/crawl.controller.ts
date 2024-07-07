@@ -19,6 +19,15 @@ export class CrawlController {
     });
   }
 
+  // @UseGuards(JwtGuard)
+  @Get('/books/latest')
+  getBooksLatest(
+    @Request() req,
+    @Query('tag') tag: string,
+  ) {
+    return this.crawlService.getBooksLatest({ tag: tag });
+  }
+
   @UseGuards(JwtGuard)
   @Post('/chapter')
   createChapters(

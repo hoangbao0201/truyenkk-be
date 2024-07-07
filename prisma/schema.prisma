@@ -13,7 +13,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 model Role {
   roleId   Int    @id @default(autoincrement())
   roleName String @unique
@@ -27,8 +26,10 @@ model User {
   email       String   @unique
   password    String?
   description String?
+  item        Int?
   rank        Int      @default(0)
   avatarUrl   String?
+  attendance  String?  @db.Text
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -38,9 +39,21 @@ model User {
   books     Book[]
   userViews UserView[]
 
-  commentsSent     Comment[]             @relation(name: "Sender")
-  commentsReceived Comment[]             @relation(name: "Receiver")
-  booksFollow      UserBookFollowModel[]
+  commentsSent      Comment[]             @relation(name: "Sender")
+  commentsReceived  Comment[]             @relation(name: "Receiver")
+  booksFollow       UserBookFollowModel[]
+  infoDetailManager InfoDetailManager?
+  historyPayment    HistoryPayment[]
+  chats             Chat[]
+}
+
+model InfoDetailManager {
+  id              Int @id @default(autoincrement())
+  countCreateBook Int @default(0)
+  countDeleteBook Int @default(0)
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [userId])
 }
 
 model Book {
@@ -160,4 +173,24 @@ model UserView {
   user    User?   @relation(fields: [userId], references: [userId])
   book    Book    @relation(fields: [bookId], references: [bookId], onDelete: Cascade)
   chapter Chapter @relation(fields: [bookId, chapterNumber], references: [bookId, chapterNumber], onDelete: Cascade)
+}
+
+model HistoryPayment {
+  historyPaymentId Int      @id @default(autoincrement())
+  price            Int
+  userId           Int
+  createdAt        DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [userId])
+}
+
+model Chat {
+  chatId    Int      @id @default(autoincrement())
+  socketId  String
+  chatText  String   @db.Text
+  image     String?
+  createdAt DateTime @default(now())
+
+  senderId Int?
+  sender   User? @relation(fields: [senderId], references: [userId], onDelete: Cascade)
 }

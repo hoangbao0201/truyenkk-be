@@ -9,17 +9,16 @@ import { JwtGuard } from '../auth/guard/jwt.guard';
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  // GET .../api/users/me
-  // @UseGuards(MyJwtGuard)
-  // @Get('me')
-  // async me(@GetUser() user: User) {
-  //   return user;
-  // }
-
-  @Post('/upload/avatar')
-  uploadAvatar(@Param('username') username: string) {
-    return this.userService.userDetail(username); 
+  // GET .../api/users/top
+  @Get('/top')
+  async findTopMembers() {
+    return this.userService.findTopMembers(); 
   }
+
+  // @Post('/upload/avatar')
+  // uploadAvatar(@Param('username') username: string) {
+  //   return this.userService.userDetail(username); 
+  // }
 
   @UseGuards(JwtGuard)
   @Put('/update/name')
@@ -31,10 +30,31 @@ export class UserController {
   }
 
   @UseGuards(JwtGuard)
+  @Put('/update/avatar')
+  updateAvatar(
+    @Request() req,
+    @Body('avatar') avatar: string,
+  ) {
+    return this.userService.updateAvatar({ userId: req.user.userId, avatar: avatar }); 
+  }
+
+  @UseGuards(JwtGuard)
+  @Get('/attendance')
+  attendance(@Request() req) {
+    return this.userService.attendance({ userId: +req.user.userId }); 
+  }
+
+  @UseGuards(JwtGuard)
+  @Post('/attendance')
+  attendanceCheck(@Request() req) {
+    return this.userService.attendanceCheck({ userId: +req.user.userId }); 
+  }
+
   @Get(':username')
   findOne(@Param('username') username: string) {
     return this.userService.userDetail(username); 
   }
+
 
   // @Patch(':id')
   // update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
@@ -45,6 +65,4 @@ export class UserController {
   // remove(@Param('id') id: string) {
   //   return this.userService.remove(+id);
   // }
-
-  
 }

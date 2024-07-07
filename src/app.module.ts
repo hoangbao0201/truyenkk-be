@@ -12,6 +12,7 @@ import { AdminModule } from './admin/admin.module';
 import { CloudImageModule } from './cloud-image/cloud-image.module';
 import { CrawlModule } from './crawl/crawl.module';
 import { ChatModule } from './chat/chat.module';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   imports: [
@@ -27,7 +28,8 @@ import { ChatModule } from './chat/chat.module';
     AdminModule,
     CloudImageModule,
     CrawlModule,
-    ChatModule
+    ChatModule,
+    PaymentModule
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -1,16 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudImageService } from '../cloud-image/cloud-image.service';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import userAgent from 'random-useragent';
 import * as https from 'https'
+import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
 
 @Injectable()
 export class AdminService {
   constructor(
     private prismaService: PrismaService,
     private cloudImage: CloudImageService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async findAllBooks(
@@ -40,6 +42,7 @@ export class AdminService {
           thumbnail: true,
           scrapedUrl: true,
           isGreatBook: true,
+          createdAt: true,
           _count: {
             select: {
               chapters: true,
@@ -112,6 +115,16 @@ export class AdminService {
         },
       });
       await this.cloudImage.deleteFolder(`truyenkk/books/${bookId}`);
+      await this.prismaService.infoDetailManager.update({
+        where: {
+          userId: user?.userId
+        },
+        data: {
+          countDeleteBook: {
+            increment: 1
+          }
+        }
+      });
 
       return {
         success: true,
@@ -214,6 +227,76 @@ export class AdminService {
       };
     }
   }
+
+  async dataInfoManager({ userId }: { userId: number }) {
+    try {
+      const countBook = await this.prismaService.book.count();
+      
+      const dataInfoManager = await this.prismaService.infoDetailManager.findUnique({
+        where: {
+          userId: userId,
+          user: {
+            userId: userId,
+            role: {
+              roleName: "admin"
+            }
+          }
+        },
+        select: {
+          countCreateBook: true,
+          countDeleteBook: true,
+        }
+      });
+
+      const countBookOfTags = await this.prismaService.tag.findMany({
+        orderBy: {
+          bookTags: {
+            _count: "desc",
+          },
+        },
+        select: {
+          tagId: true,
+          _count: {
+            select: {
+              bookTags: true
+            }
+          }
+        }
+      });
+
+      const paymentRes = await this.prismaService.historyPayment.findMany({
+          select: {
+            price: true
+          }
+      });
+
+      // const topMemberPayment = await this.prismaService.historyPayment.findMany({
+      //   orderBy: {
+          
+      //   }
+      // })
+
+      const totalPayment = paymentRes.reduce((accumulator, currentValue) => {
+        return accumulator + currentValue.price;
+      }, 0);
+      
+      return {
+        success: true,
+        countBook: countBook,
+        dataInfoManager: {
+          countBook,
+          ...dataInfoManager,
+          countBookOfTags: countBookOfTags,
+          totalPayment: totalPayment,
+        }
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error,
+      };
+    }
+  } 
 
   // https://webcache.googleusercontent.com/search?q=cache:
   async test(bookId: number) {

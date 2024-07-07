@@ -3,7 +3,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { textToSlug } from '../utils/textToSlug';
 
 @Injectable()
 export class BookService {
@@ -17,11 +16,12 @@ export class BookService {
     author?: string;
     genres?: string;
     notgenres?: string;
+    slug?: string;
     take?: number;
     skip?: number;
     sort?: 'desc' | 'asc';
     otherId?: number;
-    isGreatBook?: string
+    isGreatBook?: string;
   }) {
     const {
       q = '',
@@ -31,11 +31,12 @@ export class BookService {
       take = 24,
       skip = 0,
       sort = 'desc',
+      slug = '',
       isGreatBook = null,
       otherId,
     } = options;
 
-    const cvQuery = `/api/books?genres=${genres}&notgenres=${notgenres || ''}&q=${q || ''}&take=${take || ''}&skip=${skip || ''}&sort=${sort || ''}&author=${author || ''}?isGreatBook=${isGreatBook || ''}`;
+    const cvQuery = `/api/books?genres=${genres}&notgenres=${notgenres || ''}&q=${q || ''}&take=${take || ''}&skip=${skip || ''}&sort=${sort || ''}&slug=${slug || ''}&author=${author || ''}?isGreatBook=${isGreatBook || ''}`;
     const cacheValue: any = await this.cacheManager.get(cvQuery);
     if (cacheValue) {
       return {
@@ -50,12 +51,16 @@ export class BookService {
       const haveTags = genres ? genres?.split(',') : null;
       const notTags = notgenres ? notgenres?.split(',') : null;
 
-      let where: Prisma.BookWhereInput = {};
-      if(isGreatBook) {
+      let where: Prisma.BookWhereInput = {
+        status: {
+          equals: 1
+        }
+      };
+      if (isGreatBook) {
         where = {
           ...where,
-          isGreatBook: true
-        }
+          isGreatBook: true,
+        };
       }
       if (haveTags) {
         where = {
@@ -74,11 +79,23 @@ export class BookService {
       if (notTags) {
         where = {
           ...where,
-          tags: {
-            none: {
-              tagId: {
-                in: notTags,
+          AND: {
+            tags: {
+              none: {
+                tagId: {
+                  in: notTags,
+                },
               },
+            },
+          },
+        };
+      }
+      if (author) {
+        where = {
+          ...where,
+          AND: {
+            author: {
+              name: author,
             },
           },
         };
@@ -86,19 +103,33 @@ export class BookService {
       if (q) {
         where = {
           ...where,
-          title: {
-            contains: q,
-          },
+          AND: [
+            ...(Array.isArray(where.AND) ? where.AND : []),
+            {
+              title: {
+                contains: q,
+              },
+            },
+          ],
         };
       }
-      if(author) {
+      if (slug) {
+        const cvTag = slug.split('-');
+        const tagConditions = cvTag.map((tag) => ({
+          slug: {
+            contains: tag,
+          },
+        }));
+
         where = {
           ...where,
-          author: {
-            name: author
-          }
-        }
+          AND: [
+            ...(Array.isArray(where.AND) ? where.AND : []),
+            ...tagConditions,
+          ],
+        };
       }
+      // console.log('=> where: ', JSON.stringify(where));
       const books = await this.prismaService.book.findMany({
         skip: +skip,
         take: +take,
@@ -110,6 +141,8 @@ export class BookService {
           bookId: true,
           title: true,
           slug: true,
+          type: true,
+          status: true,
           thumbnail: true,
           scrapedUrl: true,
           isGreatBook: true,
@@ -218,67 +251,41 @@ export class BookService {
     }
   }
 
-  async update({ bookId, title, anotherName, author }: { bookId: number, title: string, anotherName: string, author: string | null }) {
+  async findAllSeo(options: { take?: number, skip: number }) {
     try {
-      let data: Prisma.BookUpdateInput = {};
+      const { take, skip } = options;
 
-      if(title) {
-        data = {
-          ...data,
-          title: title,
-          slug: textToSlug(title)
-        }
+      let select: Prisma.BookSelect = {
+        slug: true,
+        bookId: true,
+        title: true,
+        description: true,
+        createdAt: true,
+        updatedAt: true,
       }
-      if(anotherName) {
-        data = {
-          ...data,
-          anotherName: anotherName
-        }
-      }
-      if(author) {
-        data = {
-          ...data,
-          author: {
-            connectOrCreate: {
-              where: {
-                name: author
-              },
-              create: {
-                name: author
-              }
-            }
+      if(take) {
+        select = {
+          ...select,
+          chapters: {
+            take: 2,
+            orderBy: {
+              chapterNumber: 'desc',
+            },
+            select: {
+              chapterNumber: true,
+              createdAt: true,
+            },
           }
         }
       }
-      console.log({ bookId, title, anotherName, author })
-      const bookRes = await this.prismaService.book.update({
-        where: {
-          bookId: +bookId,
-        },
-        data: data,
-      });
 
-      return {
-        success: true,
-        book: bookRes,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error,
-      };
-    }
-  }
-
-  async findAllSeo() {
-    try {
       const books = await this.prismaService.book.findMany({
-        select: {
-          slug: true,
-          bookId: true,
-          createdAt: true,
-          updatedAt: true,
+        take: take,
+        skip: skip,
+        orderBy: {
+          updatedAt: "desc",
         },
+        select: select
       });
 
       return {
@@ -297,69 +304,77 @@ export class BookService {
     user,
     bookId,
     chapterNumber,
+    info,
   }: {
     user?: null | { userId: number };
     bookId: number;
     chapterNumber: number;
+    info: { ip: string; referer: string };
   }) {
     try {
-      if(user?.userId) {
-        const keyCache = `user=${user?.userId}-bookId=${bookId}-chapterNumber=${chapterNumber}`;
+      const { ip, referer } = info;
+      if (referer !== 'https://truyenkk.vercel.app/') {
+        return {
+          success: false,
+          message: 'You are spamming.',
+        };
+      }
 
-        const cacheValue = await this.cacheManager.get(keyCache);
-        if (!cacheValue) {
-          await this.cacheManager.set(
-            keyCache,
-            "ping",
-            15000,
-          );
+      const keyCache = user?.userId
+        ? `ip=${ip}-referer=${referer}-user=${user.userId}`
+        : `ip=${ip}-referer=${referer}`;
+
+      // -bookId=${bookId}-chapterNumber=${chapterNumber}
+
+      const optionsShow = `[${user?.userId ? "userId: " + user.userId + ", " : ""}ip: "${ip}", referer="${referer}", bookId: ${bookId}, chapterNumber: ${chapterNumber}]`;
+      console.log(optionsShow);
+
+      const cacheValue = await this.cacheManager.get(keyCache);
+
+      if (!cacheValue) {
+        await this.cacheManager.set(keyCache, 'ping', 15000);
+
+        if (user?.userId) {
           await this.prismaService.user.update({
             where: {
-              userId: user?.userId
+              userId: +user.userId,
             },
             data: {
               rank: {
-                increment: 1
+                increment: 1,
               },
               userViews: {
                 create: {
                   bookId: +bookId,
                   chapterNumber: +chapterNumber,
-                }
-              }
-            }
-          })
-          // await this.prismaService.userView.create({
-          //   data: {
-          //     bookId: +bookId,
-          //     chapterNumber: +chapterNumber,
-          //     userId: user ? user?.userId : null,
-          //   },
-          // });
-  
+                },
+              },
+            },
+          });
+
           return {
             success: true,
-            message: "Increase view successfully."
+            message: 'Increase view successfully.',
+          };
+        } else {
+          await this.prismaService.userView.create({
+            data: {
+              bookId: +bookId,
+              chapterNumber: +chapterNumber,
+              userId: null,
+            },
+          });
+
+          return {
+            success: true,
+            message: 'Increase view successfully.',
           };
         }
-
-        return {
-          success: true,
-          message: "You are spamming."
-        };
       }
 
-      await this.prismaService.userView.create({
-        data: {
-          bookId: +bookId,
-          chapterNumber: +chapterNumber,
-          userId: user ? user?.userId : null,
-        },
-      });
-
       return {
-        success: true,
-        message: "Increase view successfully."
+        success: false,
+        message: 'You are spamming.',
       };
     } catch (error) {
       return {
@@ -371,22 +386,22 @@ export class BookService {
 
   async booksFollow(options: {
     user: { userId: number };
-    take?: number,
-    skip?: number,
-    sort?: "desc" | "asc"
+    take?: number;
+    skip?: number;
+    sort?: 'desc' | 'asc';
   }) {
     try {
-      const {user, take = 24, skip = 0, sort = "desc"} = options;
+      const { user, take = 24, skip = 0, sort = 'desc' } = options;
       const books = await this.prismaService.userBookFollowModel.findMany({
         take: +take,
         skip: +skip,
         where: {
-          userId: user?.userId
+          userId: user?.userId,
         },
         orderBy: {
           book: {
-            updatedAt: sort
-          }
+            updatedAt: sort,
+          },
         },
         include: {
           book: {
@@ -407,47 +422,47 @@ export class BookService {
                   createdAt: true,
                 },
               },
-            }
-          }
-        }
-      })
+            },
+          },
+        },
+      });
       // const books = await this.prismaService.book.findMany({
       //   skip: +skip,
       //   take: +take,
       //   where: {
-          // userId: user?.userId,
-        // },
-        // orderBy: {
+      // userId: user?.userId,
+      // },
+      // orderBy: {
 
-        // },
-        // select: {
-        //   chapters: {
+      // },
+      // select: {
+      //   chapters: {
 
-        //   }
-        // }
-        // select: {
-        //   book: {
-        //     select: {
-        //       bookId: true,
-        //       title: true,
-        //       slug: true,
-        //       nameImage: true,
-        //       thumbnail: true,
-        //       scrapedUrl: true,
-        //       isGreatBook: true,
-        //       chapters: {
-        //         take: 2,
-        //         orderBy: {
-        //           chapterNumber: 'desc',
-        //         },
-        //         select: {
-        //           chapterNumber: true,
-        //           createdAt: true,
-        //         },
-        //       },
-        //     }
-        //   }
-        // },
+      //   }
+      // }
+      // select: {
+      //   book: {
+      //     select: {
+      //       bookId: true,
+      //       title: true,
+      //       slug: true,
+      //       nameImage: true,
+      //       thumbnail: true,
+      //       scrapedUrl: true,
+      //       isGreatBook: true,
+      //       chapters: {
+      //         take: 2,
+      //         orderBy: {
+      //           chapterNumber: 'desc',
+      //         },
+      //         select: {
+      //           chapterNumber: true,
+      //           createdAt: true,
+      //         },
+      //       },
+      //     }
+      //   }
+      // },
       // });
 
       const countBook = await this.prismaService.userBookFollowModel.count({
@@ -464,7 +479,7 @@ export class BookService {
       return {
         success: true,
         countPage: countBook,
-        books: books
+        books: books,
       };
     } catch (error) {
       return {
@@ -538,7 +553,7 @@ export class BookService {
         };
       }
     } catch (error) {
-      if(error.code === "") {
+      if (error.code === '') {
         return {
           success: true,
           message: type === 'follow' ? 'unfollow' : 'follow',

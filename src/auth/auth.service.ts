@@ -79,6 +79,7 @@ export class AuthService {
             const payload = {
                 userId: user.userId,
                 username: user.username,
+                item: user?.item,
                 role: {
                     name: user?.role.roleName
                 }
@@ -118,6 +119,7 @@ export class AuthService {
             const payload = {
                 userId: user.userId,
                 username: user.username,
+                item: user?.item,
                 role: {
                     name: user?.role.roleName
                 }
@@ -217,7 +219,6 @@ export class AuthService {
     // }
 
     async callbackGoogle(req, res) {
-        const urlFe = this.configService.get('NODE_ENV') === "production" ? "https://truyenkk.vercel.app" : "http://localhost:3000"
         try {
             if (!req.user) {
                 throw new Error();
@@ -240,12 +241,14 @@ export class AuthService {
                           connect: {
                             roleName: "guest"
                           }
-                        }
+                        },
+                        item: null
                     },
                     select: {
                         userId: true,
                         name: true,
                         email: true,
+                        item: true,
                         username: true,
                         createdAt: true,
                         updatedAt: true,
@@ -256,6 +259,7 @@ export class AuthService {
                 payload = {
                     userId: createUserRes.userId,
                     username: createUserRes.username,
+                    item: createUserRes?.item,
                     role: {
                         name: "guest"
                     },
@@ -265,23 +269,22 @@ export class AuthService {
                 payload = {
                     userId: user.userId,
                     username: user.username,
+                    item: user?.item,
                     role: {
                         name: user?.role.roleName
                     },
                 };
             }
-            console.log("user: ", user);
+            // console.log("user: ", user);
             
             const token = await this.jwtService.signAsync(payload, {
                 expiresIn: '1m',
                 secret: this.configService.get('TOKEN_SETCRET'),
             });
-
-            // console.log("token: ", token);
             
-            res.redirect(`${urlFe}/auth/login?token=${token}`);
+            res.redirect(`https://truyenkk.vercel.app/auth/login?token=${token}${!user ? "&isRegister=true" : ""}`);
         } catch (error) {
-            res.redirect(`${urlFe}/auth/login?type=ERROR_LOGIN_GOOGLE`);
+            res.redirect(`https://truyenkk.vercel.app/auth/login?type=ERROR_LOGIN_GOOGLE`);
         }
     }
 
@@ -310,10 +313,11 @@ export class AuthService {
         throw new UnauthorizedException();
     }
 
-    async refreshToken(user: { userId: number, username: string, role: { name: string } }) {
+    async refreshToken(user: { userId: number, username: string, item: number, role: { name: string } }) {
         const payload = {
             userId: user.userId,
             username: user.username,
+            item: user?.item,
             role: {
                 name: user?.role.name
             }

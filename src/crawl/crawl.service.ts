@@ -16,6 +16,79 @@ export class CrawlService {
     private cloudImage: CloudImageService,
   ) {}
 
+  async getBooksLatest({ tag }: { tag: string }) {
+    console.log("tag: ", tag)
+    // userId: number
+    const manhwavnUrl = `https://manhuavn.top/the-loai/${tag}.html`;
+    const baseManhwavnUrl = new URL(manhwavnUrl).origin.replace('https://', '');
+    let id = 0;
+
+    try {
+      let booksManhwavn = [];
+
+      // 
+      try {
+        // Crawl 
+        const responseManhwavn = await axios.get(manhwavnUrl, {
+          headers: {
+            referer: baseManhwavnUrl,
+            'Sec-Ch-Ua':
+              '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': 'Windows',
+            'User-Agent': userAgent?.getRandom(),
+          },
+        });
+
+        const $ManhwavnHtml = cheerio.load(responseManhwavn.data);
+
+        $ManhwavnHtml('.lst_story .story_item').each((index, element) => {
+          const title = $ManhwavnHtml(element)
+            .find('.story_title')
+            .text();
+          const thumbnailStyle = $ManhwavnHtml(element)
+            .find('.story_img')
+            .attr('style');
+          const thumbnailMatch =
+            thumbnailStyle && thumbnailStyle.match(/url\("(.+?)"\)/);
+          const thumbnail = thumbnailMatch ? thumbnailMatch[1] : null;
+          const href = $ManhwavnHtml(element).find('.story_img').attr('href');
+
+          // console.log({
+          //   title: title,
+          //   thumbnail: thumbnail,
+          //   href: href
+          // })
+
+          if(booksManhwavn.length > 14) {
+            return false;
+          }
+          if (title && href && thumbnail) {
+            booksManhwavn.push({
+              title: title.trim(),
+              thumbnail: thumbnail,
+              link: 'https://' + baseManhwavnUrl + href,
+              type: 'manhwavn',
+              bookId: ++id,
+            });
+          }
+        });
+      } catch (error) {}
+
+      return {
+        success: true,
+        books: [
+          ...booksManhwavn,
+        ],
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error,
+      };
+    }
+  }
+
   // Create Novel
   async createBook(userId: number, { type, bookUrl }: CrawlBookDTO) {
     try {
@@ -120,6 +193,17 @@ export class CrawlService {
           },
         });
 
+        await this.prismaService.infoDetailManager.update({
+          where: {
+            userId: userId
+          },
+          data: {
+            countCreateBook: {
+              increment: 1
+            }
+          }
+        });
+
         return {
           success: true,
           type: type,
@@ -198,22 +282,22 @@ export class CrawlService {
         };
       }
 
-      // if (bookRes?.chapters.length > 0 && !bookRes?.chapters[0].next) {
-      //   const dataChapter = await this.crawlChapter(
-      //     type,
-      //     bookRes?.chapters.length > 1
-      //       ? domain + '/' + bookRes?.chapters[1].next
-      //       : domain + '/' + bookRes?.next,
-      //   );
+      if (type !== "nettruyen" && bookRes?.chapters.length > 0 && !bookRes?.chapters[0].next) {
+        const dataChapter = await this.crawlChapter(
+          type,
+          bookRes?.chapters.length > 1
+            ? domain + '/' + bookRes?.chapters[1].next
+            : domain + '/' + bookRes?.next,
+        );
 
-      //   if (dataChapter?.success && !dataChapter?.next) {
-      //     return {
-      //       success: false,
-      //       error: 'Currently at the latest chapter.',
-      //     };
-      //   }
-      //   bookRes.chapters[0].next = dataChapter?.next.replace(domain + '/', '');
-      // }
+        if (dataChapter?.success && !dataChapter?.next) {
+          return {
+            success: false,
+            error: 'Currently at the latest chapter.',
+          };
+        }
+        bookRes.chapters[0].next = dataChapter?.next.replace(domain + '/', '');
+      }
 
       const listUrlChapter = await this.crawlListChapter({
         take: take,
@@ -228,27 +312,45 @@ export class CrawlService {
       //   bookRes,
       //   listUrlChapter: listUrlChapter,
       // };
-
+      let chapterRes = null;
       // Create Multiple Chapter
-      const chapterRes = await this.createMultipleChaptersBook({
-        type: type,
-        take: +take,
-        bookId: bookRes?.bookId,
-        start: bookRes?._count.chapters,
-        domain: domain,
-        listUrlChapter: listUrlChapter.chapters,
-        // chapterUrl:
-        //   bookRes?._count.chapters > 0
-        //     ? bookRes?.chapters[0].next
-        //     : bookRes?.next,
-      });
-      if (!chapterRes?.success) {
+      if(type === "nettruyen") {
+        chapterRes = await this.createMultipleChaptersBookTypeNettruyen({
+          type: type,
+          take: +take,
+          bookId: bookRes?.bookId,
+          start: bookRes?._count.chapters,
+          domain: domain,
+          listUrlChapter: listUrlChapter.chapters,
+          // chapterUrl:
+          //   bookRes?._count.chapters > 0
+          //     ? bookRes?.chapters[0].next
+          //     : bookRes?.next,
+        });
+      }
+      else {
+        chapterRes = await this.createMultipleChaptersBook({
+          type: type,
+          take: +take,
+          bookId: bookRes?.bookId,
+          start: bookRes?._count.chapters,
+          domain: domain,
+          chapterUrl:
+            bookRes?._count.chapters > 0
+              ? bookRes?.chapters[0].next
+              : bookRes?.next,
+        });
+      }
+
+      console.log('============== END ==============');
+      
+      if (!chapterRes || !chapterRes?.success) {
         return {
           success: false,
-          error: 'Crawl error.',
+          typeCrawl: chapterRes.typeCrawl,
+          message: chapterRes?.message,
         };
       }
-      console.log('============== END ==============');
 
       return {
         success: true,
@@ -269,9 +371,174 @@ export class CrawlService {
     take,
     type,
     domain,
+    bookId,
+    chapterUrl,
+  }: {
+    take: number;
+    start: number;
+    bookId: number;
+    domain: string;
+    chapterUrl: string;
+    type: 'nettruyen' | 'manhuavn' | 'truyenqq';
+  }): Promise<{
+    success: boolean;
+    typeCrawl: string;
+    message?: string;
+    dataTest?: any;
+  }> {
+    let listChapter = [];
+    let urlQuery = chapterUrl;
+
+    try {
+      for (let i = start + 1; i <= start + take; i++) {
+        console.log('urlCrawl: ', domain + '/' + urlQuery);
+        const dataChapter = await this.crawlChapter(
+          type,
+          domain + '/' + urlQuery,
+        );
+        // console.log(dataChapter)
+        if (!dataChapter?.success) {
+          // throw new Error(`Error crawling chapter ${i}: ${dataChapter?.error}`);
+          return {
+            success: false,
+            typeCrawl: 'CHAPTER_FETCH_FAILURE',
+            message: `Lấy chương ${i} thất bại`,
+          };
+        }
+
+        // return {
+        //   success: true,
+        //   typeCrawl: 'CHAPTER_FETCH_DATATEST__SUCCESSFULL',
+        //   dataTest: {
+        //     chapterUrl,
+        //     dataChapter,
+        //     domain: domain + '/' + urlQuery,
+        //     cvNext: dataChapter?.next
+        //       ? dataChapter?.next.replace(domain + '/', '')
+        //       : null
+        //   }
+        // };
+
+        const imagesChapter = await this.cloudImage.uploadImagesChapterOnS3({
+          bookId: bookId,
+          domain: domain,
+          chapterNumber: i,
+          listUrl: dataChapter?.chapter.content,
+        });
+
+        if (!imagesChapter?.success || imagesChapter?.images.length === 0) {
+          await this.cloudImage.deleteFolder(`books/${bookId}/chapters/${i}`);
+
+          // throw new Error(
+          //   `Failed to create images for chapter ${i}: ${imagesChapter?.error}`,
+          // );
+          return {
+            success: false,
+            typeCrawl: 'CHAPTER_IMAGE_ERROR',
+            message: `Lấy ảnh của chương ${i} thất bại`,
+          };
+        }
+
+        // Push Array Create Books
+        const cvNext = dataChapter?.next
+          ? dataChapter?.next.replace(domain + '/', '')
+          : null;
+        listChapter.push({
+          next: cvNext,
+          bookId: bookId,
+          chapterNumber: i,
+          title: dataChapter?.chapter.title.trim(),
+          content: JSON.stringify(imagesChapter?.images),
+        });
+
+        if (
+          listChapter.length >= 3 ||
+          listChapter.length >= take ||
+          (listChapter.length > 0 && !cvNext)
+        ) {
+          // Create Chapter Book
+          const chapterRes = await this.prismaService.chapter.createMany({
+            data: listChapter?.map((chapter) => chapter),
+          });
+          if (!chapterRes) {
+            return {
+              success: false,
+              typeCrawl: 'CREATE_CHAPTER_FAILURE',
+              message: 'Tạo chương thất bại',
+            };
+          }
+
+          // Update updatedAt of Book
+          await this.prismaService.book.update({
+            where: { bookId: bookId },
+            data: { updatedAt: new Date() },
+          });
+
+          listChapter = [];
+          console.log('============== UPLOAD CHAPTER ==============');
+        }
+
+        // If the next chapter doesn't exist
+        if (!cvNext) {
+          break;
+        }
+
+        urlQuery = cvNext;
+      }
+
+      return {
+        success: true,
+        typeCrawl: 'CREATE_CHAPTER_SUCCESS',
+        message: 'Tạo chương thành công',
+      };
+    } catch (error) {
+      if (listChapter?.length > 0) {
+        try {
+          const chapterRes = await this.prismaService.chapter.createMany({
+            data: listChapter?.map((chapter) => chapter),
+          });
+          if (!chapterRes) {
+            return {
+              success: false,
+              typeCrawl: 'CREATE_CHAPTER_FAILURE',
+              message: 'Tạo chương thất bại',
+            };
+          }
+
+          // Update updatedAt of Book
+          await this.prismaService.book.update({
+            where: { bookId: bookId },
+            data: { updatedAt: new Date() },
+          });
+
+          return {
+            success: true,
+            typeCrawl: 'CREATE_CHAPTER_SUCCESS',
+            message: 'Tạo chương thành công',
+          };
+        } catch (remainingChaptersError) {
+          return {
+            success: false,
+            typeCrawl: 'CREATE_CHAPTER_FAILURE',
+            message: remainingChaptersError.message || 'Unknown error',
+          };
+        }
+      }
+      return {
+        success: false,
+        typeCrawl: 'CREATE_CHAPTER_FAILURE',
+        message: error.message || 'Unknown error',
+      };
+    }
+  }
+
+  async createMultipleChaptersBookTypeNettruyen({
+    start,
+    take,
+    type,
+    domain,
     listUrlChapter,
     bookId,
-    // chapterUrl,
   }: {
     take: number;
     start: number;
@@ -291,7 +558,7 @@ export class CrawlService {
       for (let i = start + 1; i <= start + take; i++) {
         const dataChapter = await this.crawlChapter(
           type,
-          domain + '/' + listUrlChapter[i - start - 1],
+          listUrlChapter[i - start - 1],
         );
         if (!dataChapter?.success) {
           return {
@@ -300,15 +567,16 @@ export class CrawlService {
             message: `Lấy chương ${i} thất bại`,
           };
         }
-
-        // return {
-        //   success: true,
-        //   // chapterUrl,
-        //   next: listUrlChapter[i - start],
-        //   dataChapter,
-        //   // cvNext,
-        //   // domain: domain + '/' + urlQuery,
-        // };
+        console.log(dataChapter);
+        return {
+          success: true,
+          typeCrawl: "TEST",
+          // chapterUrl,
+          // next: listUrlChapter[i - start],
+          // dataChapter,
+          // cvNext,
+          // domain: domain + '/' + urlQuery,
+        };
 
         const imagesChapter = await this.cloudImage.uploadImagesChapterOnS3({
           bookId: bookId,
@@ -422,9 +690,14 @@ export class CrawlService {
   // Crawl Book
   async crawlBook(type: 'nettruyen' | 'manhuavn' | 'truyenqq', url: string) {
     const baseUrl = new URL(url).origin;
+    console.log("baseUrl: ", baseUrl)
     try {
       const response = await axios.get(
-        'https://webcache.googleusercontent.com/search?q=cache:' + url,
+        // 'https://webcache.googleusercontent.com/search?q=cache:' + 
+        // 'https://www.google.com/amp/s/www.' +
+        url
+          // .replace("https://", "")
+        ,
         {
           headers: {
             referer: baseUrl,
@@ -437,7 +710,7 @@ export class CrawlService {
         },
       );
 
-      const $ = cheerio.load(response?.data, { decodeEntities: false });
+      const $ = cheerio.load(response?.data);
       let title = '';
       let thumbnail = null;
       let description = '';
@@ -472,15 +745,30 @@ export class CrawlService {
         });
 
         next = $('.read-action a').first().attr('href');
-      } else if ('manhuavn') {
-        title = $('.wrap-content-info .title').text().trim();
-        anotherName = $('.wrap-content-info .list-info .info-row')
-          .eq(5)
-          .text()
-          .replace('Tác Giả :', '')
-          .trim();
-      } else if ('truyenqq') {
-        title = $('.book_other > h1').text().trim();
+      }
+      // MANHHUAVN
+      else if (type === 'manhuavn') {
+        title = $('h1.title').text().trim();
+        
+        author = $('.list-info .info-row i.fa-user-circle-o').next().text().trim();
+
+        thumbnail = $('.wrap-content-image img').attr('src').trim().replace("https://", "");
+
+        $('li.clearfix i.fa-tags').nextAll('a').each(function() {
+          const tag = $(this).attr("href").replace("/the-loai/", "").replace(".html", "").trim();
+          if(tag in listIdToData) {
+            tags.push(tag);
+          }
+        });
+
+        const isNext = $("#lst-chapter li a").last().attr("href").trim();
+        next = isNext ? baseUrl + isNext : false;
+      }
+      // TRUYENQQ
+      else if (type === 'truyenqq') {
+        title = $('h1').text().trim();
+        thumbnail = $('.book_avatar img').attr('src').trim();
+        console.log("title: ");
         // anotherName = $('.wrap-content-info .list-info .info-row').eq(5).text().replace("Tác Giả :", "").trim();
       }
 
@@ -511,7 +799,8 @@ export class CrawlService {
       // console.log('chapter url: ', url);
       const baseUrl = new URL(url).origin;
       const response = await axios.get(
-        'https://webcache.googleusercontent.com/search?q=cache:' + url,
+        // 'https://webcache.googleusercontent.com/search?q=cache:' + 
+        url,
         {
           headers: {
             referer: baseUrl,
@@ -532,7 +821,7 @@ export class CrawlService {
       if (type === 'nettruyen') {
         title = '';
         content = $('.reading-detail .page-chapter img')
-          .map((index, element) => 'https:' + $(element).attr('src'))
+          .map((index, element) => 'https:' + $(element).attr('data-original'))
           .get();
 
         // console.log(content);
@@ -541,6 +830,16 @@ export class CrawlService {
         //   nextChapter === 'javascript:nm5213(0)'
         //     ? null
         //     : new URL(url).origin + nextChapter;
+      }
+      else if (type === 'manhuavn') {
+        title = '';
+        content = $('#lst_content .page-chapter img')
+          .map((index, element) => {
+            const urlChapter = $(element).attr('data-original');
+            return urlChapter.trim();
+          })
+          .get();
+        next = $('#nextchap').attr('href').replace("/","");
       }
       return {
         success: true,
@@ -573,7 +872,8 @@ export class CrawlService {
     try {
       const baseUrl = new URL(urlBook).origin;
       const response = await axios.get(
-        'https://webcache.googleusercontent.com/search?q=cache:' + urlBook,
+        // 'https://webcache.googleusercontent.com/search?q=cache:' +
+        urlBook,
         {
           headers: {
             referer: baseUrl,
@@ -608,6 +908,7 @@ export class CrawlService {
           ...getListChapter.slice(currentIndex - take, currentIndex + 1),
         ].reverse();
       }
+      
       return {
         success: true,
         chapters: listChapter,

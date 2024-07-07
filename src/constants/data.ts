@@ -231,6 +231,76 @@ export const listIdToData = {
     description:
       'Xuyên Không, Xuyên Việt là thể loại nhân vật chính vì một lý do nào đó mà bị đưa đến sinh sống ở một không gian hay một khoảng thời gian khác. Nhân vật chính có thể trực tiếp xuyên qua bằng thân xác mình hoặc sống lại bằng thân xác người khác.',
   },
+
+  // MANHHUAVN
+  'co-dai': {
+    title: 'Cổ Đại',
+    description: '',
+  },
+  'hien-dai-': {
+    title: 'Hiện đại',
+    description: '',
+  },
+  'huyen-huyen': {
+    title: 'Huyền Huyễn',
+    description: '',
+  },
+  'hai-huoc': {
+    title: 'Hài Hước',
+    description: '',
+  },
+  'hau-cung': {
+    title: 'Hậu Cung',
+    description: '',
+  },
+  'he-thong': {
+    title: 'Hệ Thống',
+    description: '',
+  },
+  'kinh-di': {
+    title: 'Kinh Dị',
+    description: '',
+  },
+  'lich-su': {
+    title: 'Lịch Sử',
+    description: '',
+  },
+  'mat-the': {
+    title: 'Mạt Thế',
+    description: '',
+  },
+  // 'ngon-tinh': {
+  //   title: 'Ngôn Tình',
+  //   description: ""
+  // },
+  'thanh-xuan---vuon-truong': {
+    title: 'Thanh xuân - Vườn trường',
+    description: '',
+  },
+  'truyen-sang-tac': {
+    title: 'Truyện Sáng Tác',
+    description: '',
+  },
+  'trung-sinh': {
+    title: 'Trùng Sinh',
+    description: '',
+  },
+  'trong-sinh': {
+    title: 'Trọng sinh',
+    description: '',
+  },
+  'tu-tien': {
+    title: 'Tu Tiên',
+    description: '',
+  },
+  'xuyen-khong': {
+    title: 'Xuyên Không',
+    description: '',
+  },
+  'do-thi': {
+    title: 'Đô Thị',
+    description: '',
+  },
 };
 
 // export const listIdToTitle = {

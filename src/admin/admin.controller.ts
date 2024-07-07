@@ -46,6 +46,14 @@ export class AdminController {
   // }
 
   @UseGuards(JwtGuard)
+  @Get('/dataInfoManager')
+  getCountCreateUpdateBook(
+    @Request() req,
+  ) {
+    return this.adminService.dataInfoManager({ userId: +req.user.userId });
+  }
+
+  @UseGuards(JwtGuard)
   @Post('/books')
   updateBook(
     @Request() req,
@@ -78,33 +86,6 @@ export class AdminController {
   ) {
     return this.adminService.getUsers(req.user);
   }
-
-  // @UseGuards(JwtGuard)
-  // @Post('/change/cloud/book')
-  // changeCloudBook(
-  //   @Body('type') type: "lxhentai" | "hentaivn",
-  //   @Body('bookId') bookId: string,
-  //   @Body('email') email: string,
-  // ) {
-  //   return this.adminService.changeCloudBook({
-  //     bookId: bookId,
-  //     email: email,
-  //   });
-  // }
-
-  // @UseGuards(JwtGuard)
-  // @Post('/change/cloud/chapters')
-  // changeCloudChapters(
-  //   @Body('take') take: string,
-  //   @Body('bookId') bookId: string,
-  //   @Body('email') email: string,
-  // ) {
-  //   return this.adminService.changeCloudChapters({
-  //     take: take,
-  //     bookId: bookId,
-  //     email: email,
-  //   });
-  // }
 
   @Get('/test')
   async test(
